@@ -2,11 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import pandas as pd
-import datetime
+from nba_api.stats.endpoints import GameRotation, LeagueGameFinder
 import time
-from nba_api.stats.endpoints import LeagueGameFinder
-from nba_api.stats.static import teams
-from nba_api.live.nba.endpoints import playbyplay
 
 CURR_SEASON = '2021-22'
 
@@ -32,20 +29,18 @@ for teamid in TEAM_IDS:
 
 print('Finished gathering game IDs.')
 
-# Gather PBP
-OUTPUT = pd.DataFrame()
-
-print('Gathering play by play data...')
-for gameid in CURR_SEASON_GAME_IDS:
-    pbp = playbyplay.PlayByPlay(gameid).get_dict()['game']['actions']
-    pbp_df = pd.DataFrame.from_dict(pbp)
-    pbp_df['game_id'] = gameid
+# Gather game rotations
+ROTATIONS_DATA = pd.DataFrame()
+for game_id in CURR_SEASON_GAME_IDS:
+    game_rotations = GameRotation(game_id).get_data_frames()
     time.sleep(5)
-    OUTPUT = pd.concat([OUTPUT, pbp_df])
-print('Finished gathering play by play data.')
+    away_rotations = game_rotations[0]
+    home_rotations = game_rotations[1]
+    ROTATIONS_DATA = pd.concat([ROTATIONS_DATA, away_rotations, home_rotations])
+print('Finished gathering rotations data.')
 
 # Export file
-FILEPATH = '../data/2021_22_pbp_data.csv'
-OUTPUT.to_csv(FILEPATH)
+FILEPATH = '../data/2021_22_rotations_data.csv'
+ROTATIONS_DATA.to_csv(FILEPATH)
 
-print(f"File outputted to: {FILEPATH}")
+print(f"Rotations data successfully outputted to {FILEPATH}")

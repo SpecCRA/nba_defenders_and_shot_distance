@@ -26,7 +26,7 @@ class Player:
     def _get_player_gamelogs(self):
         assert len(self.season) == 7, f"Season must be in YYYY-YY format"
         gamelogs = PlayerGameLog(player_id=self.playerid, season=self.season).get_data_frames()[0]
-        self.player_gamelogs = list(gamelogs['Game_ID'])
+        self.player_gamelogs = list(gamelogs['Game_ID'].unique())
 
     def _get_team_id(self):
         assert self.player_gamelogs is not None, f"Player game logs not yet loaded."
@@ -38,10 +38,11 @@ class Player:
 
     def _get_team_logs(self):
         assert self.teamid is not None, "Team ID not yet assigned. Run self._get_team_id first."
-        self.team_gamelogs = TeamGameLog(
+        gamelogs = TeamGameLog(
             team_id=self.teamid,
             season=self.season
         ).get_data_frames()[0]
+        self.team_gamelogs = list(gamelogs['Game_ID'].unique())
 
     def _get_games_not_played(self):
         assert self.team_gamelogs is not None, "Team gamelogs not yet assigned. Run self._get_team_logs first."
@@ -52,7 +53,7 @@ class Player:
         self._get_player_id()
         self._get_player_gamelogs()
         self._get_team_id()
-        time.sleep(3) # Avoid overloading NBA API
+        time.sleep(3)  # Avoid overloading NBA API
         self._get_team_logs()
         self._get_games_not_played()
 
@@ -63,6 +64,7 @@ class ShotFreq(Player):
     rotations: pd.core.frame.DataFrame = None
     pbp_w_player: pd.core.frame.DataFrame = pd.DataFrame()
     pbp_wo_player: pd.core.frame.DataFrame = pd.DataFrame()
+    shot_stats: pd.core.frame.DataFrame = None
 
     def load_pbp(self, filepath):
         self.pbp = (pd.read_csv(filepath, index_col=0, dtype={'game_id': np.str})
@@ -81,22 +83,25 @@ class ShotFreq(Player):
         pbp['abScoreMargin'] = np.abs(pbp['scoreMargin'])
         pbp['time'] = pbp.apply(self._conv_pbp_clock_to_seconds, axis=1)
         pbp = (pbp[
-            ~((pbp['period'] == 4) & (pbp['time'] >= eight_minutes_left) & (pbp['abScoreMargin'] >= 20))
-        ]
-            .dropna(subset=['shotDistance'])
-            .query('shotDistance <= 50')
-            .pipe(self._round_shot_distances)
-        )
+                   ~((pbp['period'] == 4) & (pbp['time'] >= eight_minutes_left) & (pbp['abScoreMargin'] >= 20))
+               ]
+               .dropna(subset=['shotDistance'])
+               .query('shotDistance <= 35')
+               .pipe(self._round_shot_distances)
+               )
         return pbp
 
     def _preprocess_rotations(self, rotations=None):
         if rotations is None:
             rotations = self.rotations
         rotations[['IN_TIME_REAL', 'OUT_TIME_REAL']] = rotations[['IN_TIME_REAL', 'OUT_TIME_REAL']].apply(
-            lambda times: times/10, axis=1
+            lambda times: times / 10, axis=1
         )
-        rotation = rotations[
-            (rotations['GAME_ID'].isin(self.player_gamelogs)) & (rotations['PERSON_ID'] == self.playerid)
+        rotations = rotations[
+            (
+                # (rotations['GAME_ID'].isin(self.player_gamelogs)) &
+                (rotations['PERSON_ID'] == self.playerid)
+            )
         ]
         return rotations
 
@@ -120,7 +125,7 @@ class ShotFreq(Player):
         pbp_all = self.pbp[self.pbp['game_id'].isin(self.player_gamelogs)]
         common_pbp_cols = list(pbp_all.columns)
 
-        pbp_all = pbp_all.merge(self.pbp_w_player, on = common_pbp_cols, how='left', indicator=True)
+        pbp_all = pbp_all.merge(self.pbp_w_player, on=common_pbp_cols, how='left', indicator=True)
         self.pbp_wo_player = pd.concat([pbp_all[pbp_all['_merge'] == 'left_only']])
         self.pbp_wo_player.drop(columns='_merge', inplace=True)
 
@@ -131,8 +136,10 @@ class ShotFreq(Player):
             for row in game_rotation.iterrows():
                 row = row[1]
                 with_player = self.pbp[
-                    (self.pbp['game_id'] == gameid) &
-                    (self.pbp['time'].between(row['IN_TIME_REAL'], row['OUT_TIME_REAL'], inclusive='both'))
+                    (
+                            (self.pbp['game_id'] == gameid) &
+                            (self.pbp['time'].between(row['IN_TIME_REAL'], row['OUT_TIME_REAL'], inclusive='both'))
+                    )
                 ]
                 self.pbp_w_player = pd.concat([self.pbp_w_player, with_player])
 
@@ -144,3 +151,56 @@ class ShotFreq(Player):
     def create_pbps(self):
         self.create_pbp_w_player()
         self.create_pbp_wo_player()
+
+    @staticmethod
+    def _create_shot_agg(df):
+        assert 'roundedShotDistance' in df.columns, "Rounded shot distance not yet created."
+        df = df.groupby('roundedShotDistance')['shotResult'].value_counts().rename('value_counts').reset_index()
+        return df
+
+    def _select_dataframe(self, player_mode: np.str):
+        # player or not
+        if player_mode is 'with_player':
+            return self._create_shot_agg(self.pbp_w_player)
+        elif player_mode is 'without_player':
+            return self._create_shot_agg(self.pbp_wo_player)
+        elif player_mode is 'league':
+            df = self.pbp[~(self.pbp['game_id'].isin(self.team_gamelogs))]
+            return self._create_shot_agg(df)
+
+    def create_shot_stats(self, player_mode: np.str):
+        df = self._select_dataframe(player_mode)
+
+        # calculate shot accuracies
+        shot_distances = list(df['roundedShotDistance'].unique())
+        total_shots = df['value_counts'].sum()
+        shot_accuracies = []
+        shot_frequencies = []
+
+        for dist in shot_distances:
+            df_slice = df[df['roundedShotDistance'] == dist]
+            if len(df_slice) <= 1:
+                made_shots = 0
+            else:
+                made_shots = df_slice[df_slice['shotResult'] == 'Made']['value_counts'].iloc[0]
+            acc  = made_shots / df_slice['value_counts'].sum()
+            shot_accuracies.append(acc)
+            shot_freq = df_slice['value_counts'].sum() / total_shots
+            shot_frequencies.append(shot_freq)
+
+        output = pd.DataFrame(
+            {
+                'roundedShotDistance': shot_distances,
+                f"FG_perc_{player_mode}": shot_accuracies,
+                f"shotFreq_{player_mode}": shot_frequencies
+            }
+        )
+
+        self.merge_shot_stats(df=output)
+
+    def merge_shot_stats(self, df):
+        merge_col = 'roundedShotDistance'
+        if self.shot_stats is None:
+            self.shot_stats = df
+        else:
+            self.shot_stats = df.merge(self.shot_stats, how='right', on=merge_col)

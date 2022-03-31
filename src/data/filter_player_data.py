@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import pandas as pd
 import numpy as np
 import time
-from nba_api.stats.static import players, teams
+from nba_api.stats.static import players
 from nba_api.stats.endpoints import PlayerGameLog, BoxScoreTraditionalV2, TeamGameLog
 
 
@@ -15,9 +15,9 @@ class Player:
     season: str
     playerid: str = None
     teamid: str = None
-    player_gamelogs: list = None
-    team_gamelogs: list = None
-    games_not_played: list = None
+    player_gamelogs: [str] = field(default_factory=list)
+    team_gamelogs: [str] = field(default_factory=list)
+    games_not_played: [str] = field(default_factory=list)
 
     def _get_player_id(self):
         playerid = players.find_players_by_full_name(self.name)[0]['id']
@@ -160,15 +160,15 @@ class ShotFreq(Player):
 
     def _select_dataframe(self, player_mode: np.str):
         # player or not
-        if player_mode is 'with_player':
+        if player_mode == 'with_player':
             return self._create_shot_agg(self.pbp_w_player)
-        elif player_mode is 'without_player':
+        elif player_mode == 'without_player':
             return self._create_shot_agg(self.pbp_wo_player)
-        elif player_mode is 'league':
+        elif player_mode == 'league':
             df = self.pbp[~(self.pbp['game_id'].isin(self.team_gamelogs))]
             return self._create_shot_agg(df)
 
-    def create_shot_stats(self, player_mode: np.str):
+    def create_agg_data(self, player_mode: np.str):
         df = self._select_dataframe(player_mode)
 
         # calculate shot accuracies
@@ -183,7 +183,7 @@ class ShotFreq(Player):
                 made_shots = 0
             else:
                 made_shots = df_slice[df_slice['shotResult'] == 'Made']['value_counts'].iloc[0]
-            acc  = made_shots / df_slice['value_counts'].sum()
+            acc = made_shots / df_slice['value_counts'].sum()
             shot_accuracies.append(acc)
             shot_freq = df_slice['value_counts'].sum() / total_shots
             shot_frequencies.append(shot_freq)
@@ -204,3 +204,7 @@ class ShotFreq(Player):
             self.shot_stats = df
         else:
             self.shot_stats = df.merge(self.shot_stats, how='right', on=merge_col)
+
+    def create_shot_stats(self):
+        for mode in ['with_player', 'without_player', 'league']:
+            self.create_agg_data(player_mode=mode)

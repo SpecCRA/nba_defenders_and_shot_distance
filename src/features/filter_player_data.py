@@ -7,6 +7,7 @@ import numpy as np
 import time
 from nba_api.stats.static import players
 from nba_api.stats.endpoints import PlayerGameLog, BoxScoreTraditionalV2, TeamGameLog
+import requests
 
 
 @dataclass
@@ -18,6 +19,7 @@ class Player:
     player_gamelogs: [str] = field(default_factory=list)
     team_gamelogs: [str] = field(default_factory=list)
     games_not_played: [str] = field(default_factory=list)
+    image_url: str = None
 
     def _get_player_id(self):
         playerid = players.find_players_by_full_name(self.name)[0]['id']
@@ -48,12 +50,20 @@ class Player:
         assert self.team_gamelogs is not None, "Team gamelogs not yet assigned. Run self._get_team_logs first."
         self.games_not_played = [gameid for gameid in self.team_gamelogs if gameid not in self.player_gamelogs]
 
+    def _get_player_image(self):
+        self.image_url = f"https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/{self.playerid}.png"
+        output_path = '../../data/player_images/'
+        img_data = requests.get(self.image_url).content
+        with open(f"{output_path}{self.name}.png", 'wb') as handler:
+            handler.write(img_data)
+
     def fill_player_info(self):
         # call each function to fill in object info
         self._get_player_id()
         self._get_player_gamelogs()
         self._get_team_id()
         time.sleep(3)  # Avoid overloading NBA API
+        self._get_player_image()
         self._get_team_logs()
         self._get_games_not_played()
 

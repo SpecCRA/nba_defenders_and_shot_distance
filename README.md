@@ -21,6 +21,7 @@ To write
 
 # Players of Interest
 
+* Bam Adebayo
 * Rudy Gobert
 * Draymond Green
 * Deandre Ayton
@@ -31,7 +32,6 @@ To write
 * Jaren Jackson Jr
 * Joel Embiid
 * Jarrett Allen
-* Kristaps Porzingis
 * Evan Mobley
 
 # Technologies Used

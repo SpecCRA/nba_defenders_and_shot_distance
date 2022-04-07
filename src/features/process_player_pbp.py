@@ -5,29 +5,31 @@ from filter_player_data import ShotFreq
 
 # List of players
 PLAYERS = [
-    'rudy gobert',
-    'draymond green',
+    'bam adebayo',
     'deandre ayton',
-    'myles turner',
-    'nikola jokic',
+    'draymond green',
+    'evan mobley',
     'giannis antetokounmpo',
-    'robert williams',
+    'jarrett allen',
     'jaren jackson jr',
     'joel embiid',
-    'jarrett allen',
-    'kristaps porzingis',
-    'evan mobley'
+    'myles turner',
+    'nikola jokic',
+    'robert williams',
+    'rudy gobert'
 ]
 
 CURR_SEASON = '2021-22'
 PBP_FILEPATH = '../../data/raw/2021_22_pbp_data.csv'
 ROTATIONS_FILEPATH = '../../data/raw/2021_22_rotations_data.csv'
 
+
 # Gather shot frequency data
 def parse_and_export():
     for name in PLAYERS:
         print(f"Starting parsing for {name}...")
-        first_name = name.split(' ')[0]
+        first_initial = name.split(' ')[0][0]
+        last_name = name.split(' ')[1]
         data = ShotFreq(name=name, season=CURR_SEASON)
         data.fill_player_info()
         data.load_pbp(filepath=PBP_FILEPATH)
@@ -35,7 +37,7 @@ def parse_and_export():
         data.create_pbps()
         data.create_shot_stats()
 
-        output_path = f"../../data/processed/{first_name}_shots_data.csv"
+        output_path = f"../../data/processed/{first_initial}{last_name}_shots_data.csv"
         data.shot_stats.to_csv(output_path)
         print(f"File outputted to {output_path}")
 

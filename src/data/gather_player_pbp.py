@@ -11,6 +11,7 @@ from nba_api.live.nba.endpoints import playbyplay
 # function to get player ID
 def _get_player_id(full_name: str):
     player_id = players.find_players_by_full_name(full_name)
+    time.sleep(0.600)
     return str(player_id[0]['id'])
 
 
@@ -20,6 +21,7 @@ def _get_games_ids(playerid: str, season: str):
         season_nullable=season,
         player_id_nullable=playerid
     ).get_data_frames()[0]
+    time.sleep(0.600)
 
     return list(gamelogs['GAME_ID'])
 
@@ -29,9 +31,8 @@ def _get_game_pbp(gameid: str):
     pbp = playbyplay.PlayByPlay(
         game_id=gameid
     ).get_dict()['game']['actions']
-
+    time.sleep(0.600)
     df = pd.DataFrame.get_dict(pbp)
-    time.sleep(3) # prevent timeout from server
     return df
 
 

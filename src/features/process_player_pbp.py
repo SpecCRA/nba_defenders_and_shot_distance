@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from filter_player_data import ShotFreq
+from tqdm import tqdm
 
 # List of players
 PLAYERS = [
@@ -26,7 +27,7 @@ ROTATIONS_FILEPATH = '../../data/raw/2021_22_rotations_data.csv'
 
 # Gather shot frequency data
 def parse_and_export():
-    for name in PLAYERS:
+    for name in tqdm(PLAYERS):
         print(f"Starting parsing for {name}...")
         first_initial = name.split(' ')[0][0]
         last_name = name.split(' ')[1]

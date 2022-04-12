@@ -23,11 +23,13 @@ class Player:
 
     def _get_player_id(self):
         playerid = players.find_players_by_full_name(self.name)[0]['id']
+        time.sleep(0.600)
         self.playerid = playerid
 
     def _get_player_gamelogs(self):
         assert len(self.season) == 7, f"Season must be in YYYY-YY format"
         gamelogs = PlayerGameLog(player_id=self.playerid, season=self.season).get_data_frames()[0]
+        time.sleep(0.600)
         self.player_gamelogs = list(gamelogs['Game_ID'].unique())
 
     def _get_team_id(self):
@@ -35,6 +37,7 @@ class Player:
         sample_boxscore = BoxScoreTraditionalV2(
             game_id=self.player_gamelogs[0]
         ).get_data_frames()[0]
+        time.sleep(0.600)
 
         self.teamid = sample_boxscore[sample_boxscore['PLAYER_ID'] == self.playerid]['TEAM_ID'].iloc[0]
 
@@ -44,6 +47,7 @@ class Player:
             team_id=self.teamid,
             season=self.season
         ).get_data_frames()[0]
+        time.sleep(0.600)
         self.team_gamelogs = list(gamelogs['Game_ID'].unique())
 
     def _get_games_not_played(self):
@@ -52,6 +56,7 @@ class Player:
 
     def _get_player_image(self):
         self.image_url = f"https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/{self.playerid}.png"
+        time.sleep(0.600)
         output_path = '../../data/player_images/'
         img_data = requests.get(self.image_url).content
         with open(f"{output_path}{self.name}.png", 'wb') as handler:
@@ -62,10 +67,10 @@ class Player:
         self._get_player_id()
         self._get_player_gamelogs()
         self._get_team_id()
-        time.sleep(3)  # Avoid overloading NBA API
         self._get_player_image()
         self._get_team_logs()
         self._get_games_not_played()
+        time.sleep(1)
 
 
 @dataclass
@@ -88,16 +93,14 @@ class ShotFreq(Player):
     def _preprocess_pbp(self, pbp=None):
         if pbp is None:
             pbp = self.pbp
-        eight_minutes_left = 8 * 60
         pbp['scoreMargin'] = pbp['scoreHome'].to_numpy() - pbp['scoreAway'].to_numpy()
         pbp['abScoreMargin'] = np.abs(pbp['scoreMargin'])
         pbp['time'] = pbp.apply(self._conv_pbp_clock_to_seconds, axis=1)
-        pbp = (pbp[
-                   ~((pbp['period'] == 4) & (pbp['time'] >= eight_minutes_left) & (pbp['abScoreMargin'] >= 20))
-               ]
+        pbp = (pbp
                .dropna(subset=['shotDistance'])
                .query('shotDistance <= 35')
                .pipe(self._round_shot_distances)
+               .pipe(self._remove_garbage_pbp_time)
                )
         return pbp
 
@@ -109,11 +112,30 @@ class ShotFreq(Player):
         )
         rotations = rotations[
             (
-                # (rotations['GAME_ID'].isin(self.player_gamelogs)) &
                 (rotations['PERSON_ID'] == self.playerid)
             )
         ]
         return rotations
+
+    def _remove_garbage_pbp_time(self, df=None, blowout_time_marker=None):
+        if blowout_time_marker is None:
+            blowout_time_marker = (4*60) + (3*12*60)
+        if df is None:
+            df = self.pbp
+
+        games = df['game_id'].unique()
+        garbage_rows = pd.DataFrame()
+        for game in games:
+            game_df = df[df['game_id'] == game].sort_values(by='time')
+            end_of_game = game_df[game_df['time'] >= blowout_time_marker]
+            if len(end_of_game) == 0:
+                continue
+            elif end_of_game.head(n=1).iloc[0]['abScoreMargin'] >= 20:
+                garbage_rows = pd.concat([garbage_rows, end_of_game])
+
+        df = pd.merge(df, garbage_rows, how='outer', indicator=True)
+        output = df[df['_merge'] == 'left_only'].drop(columns=['_merge'])
+        return output
 
     @staticmethod
     def _conv_pbp_clock_to_seconds(row):

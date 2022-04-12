@@ -8,6 +8,10 @@ This project aims to analyze the effect of certain defensive centers by looking 
 
 To write
 
+# Example Results
+
+![alt text](https://github.com/SpecCRA/nba_defenders_and_shot_distance/main/fg_league.png?raw=true)
+
 # Data Dictionary
 
 ### Main Fields
@@ -34,7 +38,13 @@ To write
 * Jarrett Allen
 * Evan Mobley
 
+# To Do
+* Write general config using hydra
+* Write general script for plotting charts without annotations
+
 # Technologies Used
 * `nba_api` library
 * Python 3.10
 * Python dataclasses
+* Plotly
+* PIL

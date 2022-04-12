@@ -10,7 +10,7 @@ To write
 
 # Example Results
 
-![alt text](https://github.com/SpecCRA/nba_defenders_and_shot_distance/main/fg_league.png?raw=true)
+![alt text](https://github.com/SpecCRA/nba_defenders_and_shot_distance/blob/d57705661945725a1bcf00875751ef179c86218e/plot_images/fg_league.png
 
 # Data Dictionary
 
